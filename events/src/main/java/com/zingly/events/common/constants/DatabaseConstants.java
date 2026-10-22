@@ -1,0 +1,66 @@
+package com.zingly.events.common.constants;
+
+/** Defines table, column, query, and query-parameter names used by persistence mappings. */
+public interface DatabaseConstants {
+
+    String TENANT_ACCOUNT_TABLE = "tenant_account";
+    String TENANT_CONFIG_TABLE = "tenant_config";
+    String CUSTOMER_SEQUENCE_TABLE = "customer_sequence";
+    String EVENT_INBOX_TABLE = "event_inbox";
+    String PROCESSED_EVENT_TABLE = "processed_event";
+    String DEAD_LETTER_TABLE = "dead_letter";
+    String USER_PREFERENCE_TABLE = "user_preference";
+    String PREFERENCE_CHANGE_LOG_TABLE = "preference_change_log";
+    String TENANT_ID_COLUMN = "tenant_id";
+    String CUSTOMER_ID_COLUMN = "customer_id";
+    String EVENT_ID_COLUMN = "event_id";
+    String DLQ_ID_COLUMN = "dlq_id";
+    String PREFERENCE_ID_COLUMN = "preference_id";
+    String CHANGE_LOG_ID_COLUMN = "change_log_id";
+    String CONTENT_FINGERPRINT_COLUMN = "content_fingerprint";
+    String CHAR_64_DEFINITION = "CHAR(64)";
+    String CHANNEL_COLUMN = "channel";
+    String CHANNEL_TYPE_COLUMN = "channel_type";
+    String NOTIFICATION_TYPE_COLUMN = "notification_type";
+    String PAYLOAD_COLUMN = "payload";
+    String EVENT_TIMESTAMP_COLUMN = "event_timestamp";
+    String RECEIVED_AT_COLUMN = "received_at";
+    String CUSTOMER_SEQUENCE_COLUMN = "customer_sequence";
+    String NEXT_SEQUENCE_COLUMN = "next_sequence";
+    String STATUS_COLUMN = "status";
+    String ATTEMPT_STARTS_COLUMN = "attempt_starts";
+    String CYCLE_FAILURES_COLUMN = "cycle_failures";
+    String NEXT_ATTEMPT_AT_COLUMN = "next_attempt_at";
+    String CLAIMED_AT_COLUMN = "claimed_at";
+    String STATUS_UPDATED_AT_COLUMN = "status_updated_at";
+    String LAST_ERROR_COLUMN = "last_error";
+    String VERSION_COLUMN = "version";
+    String OUTCOME_COLUMN = "outcome";
+    String ORIGINAL_PAYLOAD_COLUMN = "original_payload";
+    String ENRICHED_PAYLOAD_COLUMN = "enriched_payload";
+    String TENANT_CONFIG_VERSION_COLUMN = "tenant_config_version";
+    String PREFERENCE_VERSION_COLUMN = "preference_version";
+    String PROCESSED_AT_COLUMN = "processed_at";
+    String CYCLE_NUMBER_COLUMN = "cycle_number";
+    String FAILURE_COUNT_COLUMN = "failure_count";
+    String FAILURE_HISTORY_COLUMN = "failure_history";
+    String CREATED_AT_COLUMN = "created_at";
+    String UPDATED_AT_COLUMN = "updated_at";
+    String UPDATED_BY_COLUMN = "updated_by";
+    String CHANGED_AT_COLUMN = "changed_at";
+    String CHANGED_BY_COLUMN = "changed_by";
+    String REPLAYED_AT_COLUMN = "replayed_at";
+    String ENABLED_COLUMN = "enabled";
+    String IS_ENABLED_COLUMN = "is_enabled";
+    String CONFIG_VERSION_COLUMN = "config_version";
+    String CHANGE_LOG_COLUMN = "change_log";
+    String EVENT_BY_ID_FOR_UPDATE_QUERY = "select e from EventInboxEntity e where e.eventId = :eventId";
+    String DEAD_LETTER_BY_ID_FOR_UPDATE_QUERY = "select d from DeadLetterEntity d where d.dlqId = :dlqId";
+    String RETRY_COUNT_QUERY_SELECT = "select coalesce(sum(case when e.attemptStarts > 1 then e.attemptStarts - 1 else 0 end), 0) ";
+    String EVENT_INBOX_QUERY_FROM = "from EventInboxEntity e";
+    String ACTIVE_CUSTOMER_COUNT_QUERY_SELECT = "select count(distinct concat(concat(e.tenantId, ':'), e.customerId)) ";
+    String ACTIVE_CUSTOMER_COUNT_QUERY_FROM = "from EventInboxEntity e where e.status = :status";
+    String EVENT_ID_PARAMETER = "eventId";
+    String DLQ_ID_PARAMETER = "dlqId";
+    String STATUS_PARAMETER = "status";
+}

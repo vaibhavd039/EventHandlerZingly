@@ -1,0 +1,60 @@
+sequenceDiagram
+    autonumber
+    participant Coordinator as CustomerQueueCoordinator
+    participant Worker as EventWorker
+    participant Store as EventProcessingStore
+    participant Inbox as Event Inbox
+    participant Retry as RetryPolicy
+    participant DLQ as Dead Letter Store
+    actor Client
+    participant Controller as DeadLetterController
+    participant Service as DeadLetterService
+    participant Replay as DeadLetterReplayStore
+
+    rect rgb(255, 238, 238)
+        Coordinator->>Worker: process claimed event
+        Worker-->>Worker: processing throws exception
+        Worker->>Store: recordFailure(eventId, error)
+        Store->>Retry: shouldDeadLetter(failureNumber)
+        alt failures below 3
+            Retry-->>Store: false + retry delay
+            Store->>Inbox: set RETRY_WAIT and nextAttemptAt
+            Store-->>Worker: retry(delay)
+            Worker-->>Coordinator: WAIT(delay)
+        else third failure
+            Retry-->>Store: true
+            Store->>Inbox: mark event DLQ
+            Store->>DLQ: insert ACTIVE dead-letter record
+            Store-->>Worker: deadLettered
+            Worker-->>Coordinator: BLOCKED
+        end
+    end
+
+    rect rgb(238, 246, 255)
+        Client->>Controller: GET /dlq
+        Controller->>Service: list(page, size, includeReplayed)
+        Service->>DLQ: query dead-letter records
+        DLQ-->>Service: page of records
+        Service-->>Controller: DeadLetterPageResponse
+        Controller-->>Client: 200 OK
+    end
+
+    rect rgb(236, 253, 245)
+        Client->>Controller: POST /dlq/{dlqId}/replay
+        Controller->>Service: replay(dlqId)
+        Service->>Replay: replay(dlqId, now)
+        Replay->>DLQ: lock dead-letter record
+        Replay->>Inbox: lock event and verify customer head
+        alt already replayed
+            Replay-->>Service: existing replay result
+            Service-->>Controller: alreadyReplayed=true
+            Controller-->>Client: 200 OK
+        else active DLQ head
+            Replay->>Inbox: reset event to QUEUED
+            Replay->>DLQ: mark record REPLAYED
+            Replay-->>Service: replay result + customer key
+            Service->>Coordinator: signal(customerKey)
+            Service-->>Controller: accepted replay
+            Controller-->>Client: 202 Accepted
+        end
+    end

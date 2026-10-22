@@ -1,0 +1,863 @@
+{
+  "info": {
+    "_postman_id": "cdaf92a3-bf72-4d92-a864-3d502ca340b6",
+    "name": "Engagement Event Processing API",
+    "description": "Runnable end-to-end scenarios matching the HLD, sequence, and activity diagrams: event admission and idempotency, customer-ordered worker processing, preferences, retry with backoff, DLQ inspection and replay, statistics, and OpenAPI. Run folders from top to bottom against http://localhost:8080. The H2 file database retains data between runs, while every event-producing request creates fresh UUIDs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "tenantId",
+      "value": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "key": "customerId",
+      "value": "22222222-2222-4222-8222-222222222222"
+    },
+    {
+      "key": "dlqCustomerId",
+      "value": "44444444-4444-4444-8444-444444444444"
+    },
+    {
+      "key": "eventId",
+      "value": ""
+    },
+    {
+      "key": "eventTimestamp",
+      "value": ""
+    },
+    {
+      "key": "poisonEventId",
+      "value": ""
+    },
+    {
+      "key": "poisonTimestamp",
+      "value": ""
+    },
+    {
+      "key": "dlqId",
+      "value": ""
+    },
+    {
+      "key": "preferenceId",
+      "value": ""
+    },
+    {
+      "key": "suppressedEventId",
+      "value": ""
+    },
+    {
+      "key": "suppressedTimestamp",
+      "value": ""
+    },
+    {
+      "key": "orderingCustomerId",
+      "value": "55555555-5555-4555-8555-555555555555"
+    },
+    {
+      "key": "blockingEventId",
+      "value": ""
+    },
+    {
+      "key": "blockingTimestamp",
+      "value": ""
+    },
+    {
+      "key": "followerEventId",
+      "value": ""
+    },
+    {
+      "key": "followerTimestamp",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Documentation",
+      "item": [
+        {
+          "name": "Get OpenAPI JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v3/api-docs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs"
+              ]
+            },
+            "description": "Returns the OpenAPI document used by Swagger UI."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('OpenAPI document is available', () => pm.response.to.have.status(200));",
+                  "pm.test('OpenAPI version is present', () => pm.expect(pm.response.json().openapi).to.exist);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Preferences",
+      "item": [
+        {
+          "name": "Disable ORDER_STATUS Email",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notificationType\": \"ORDER_STATUS\",\n  \"channel\": \"EMAIL\",\n  \"enabled\": false,\n  \"updatedBy\": \"postman-user\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants/{{tenantId}}/users/{{customerId}}/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tenants",
+                "{{tenantId}}",
+                "users",
+                "{{customerId}}",
+                "preferences"
+              ]
+            },
+            "description": "Creates or updates an EMAIL opt-out for this tenant customer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Preference is saved', () => pm.response.to.have.status(200));",
+                  "pm.test('Email is disabled', () => pm.expect(pm.response.json().enabled).to.eql(false));",
+                  "pm.collectionVariables.set('preferenceId', pm.response.json().preferenceId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/{{tenantId}}/users/{{customerId}}/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tenants",
+                "{{tenantId}}",
+                "users",
+                "{{customerId}}",
+                "preferences"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Preferences are returned', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Preference Change Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/{{tenantId}}/users/{{customerId}}/preferences/{{preferenceId}}/change-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tenants",
+                "{{tenantId}}",
+                "users",
+                "{{customerId}}",
+                "preferences",
+                "{{preferenceId}}",
+                "change-logs"
+              ]
+            },
+            "description": "Returns preference history while exposing the VARCHAR change_log value as a JSON object."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Change logs are returned', () => pm.response.to.have.status(200));",
+                  "pm.test('changeLog is JSON', () => pm.expect(pm.response.json()[0].changeLog).to.be.an('object'));",
+                  "pm.test('Current value is false', () => pm.expect(pm.response.json()[0].changeLog.currValue).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Accept New Chat Event",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('eventId', pm.variables.replaceIn('{{$randomUUID}}'));",
+                  "pm.collectionVariables.set('eventTimestamp', new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('New event is accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Event is not a duplicate', () => pm.expect(pm.response.json().duplicate).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"channel\": \"CHAT\",\n  \"notificationType\": \"ORDER_STATUS\",\n  \"payload\": {\n    \"message\": \"Where is my order?\"\n  },\n  \"timestamp\": \"{{eventTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Identical Duplicate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"channel\": \"CHAT\",\n  \"notificationType\": \"ORDER_STATUS\",\n  \"payload\": {\n    \"message\": \"Where is my order?\"\n  },\n  \"timestamp\": \"{{eventTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Duplicate returns existing event', () => pm.response.to.have.status(200));",
+                  "pm.test('Duplicate flag is true', () => pm.expect(pm.response.json().duplicate).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Conflicting Duplicate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"channel\": \"CHAT\",\n  \"notificationType\": \"ORDER_STATUS\",\n  \"payload\": {\n    \"message\": \"Changed content\"\n  },\n  \"timestamp\": \"{{eventTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Changed duplicate is rejected', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Event Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Event status is available', () => pm.response.to.have.status(200));",
+                  "pm.test('Correct event is returned', () => pm.expect(pm.response.json().eventId).to.eql(pm.collectionVariables.get('eventId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept Persistent Failure Event",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('poisonEventId', pm.variables.replaceIn('{{$randomUUID}}'));",
+                  "pm.collectionVariables.set('poisonTimestamp', new Date().toISOString());",
+                  "pm.collectionVariables.unset('dlqId');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Failure event is accepted first', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{poisonEventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{dlqCustomerId}}\",\n  \"channel\": \"VOICE\",\n  \"notificationType\": \"CALL_SUMMARY\",\n  \"payload\": {\n    \"transcript\": \"Test call\",\n    \"simulateFailure\": \"ALWAYS\"\n  },\n  \"timestamp\": \"{{poisonTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "description": "The simulateFailure flag forces all three attempts to fail so the event reaches the DLQ."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker Processing and Customer Ordering",
+      "description": "Exercises preference suppression and proves that a DLQ head blocks later events for the same tenant/customer lane while other customers remain independent.",
+      "item": [
+        {
+          "name": "Accept Preference-Suppressed Email Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{suppressedEventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"channel\": \"EMAIL\",\n  \"notificationType\": \"ORDER_STATUS\",\n  \"payload\": {\n    \"subject\": \"Order update\",\n    \"body\": \"This event should be processed with a suppressed outcome.\"\n  },\n  \"timestamp\": \"{{suppressedTimestamp}}\"\n}"
+            },
+            "description": "Uses the EMAIL preference disabled earlier. Processing still completes, but the stored outcome is SUPPRESSED_BY_PREFERENCE."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('suppressedEventId', pm.variables.replaceIn('{{$randomUUID}}'));",
+                  "pm.collectionVariables.set('suppressedTimestamp', new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Suppressed event is admitted', () => pm.response.to.have.status(202));",
+                  "pm.test('Fresh event is not a duplicate', () => pm.expect(pm.response.json().duplicate).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Suppressed Event Final Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{suppressedEventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{suppressedEventId}}"
+              ]
+            },
+            "description": "Waits for the asynchronous worker and verifies durable completion."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "setTimeout(() => {}, 1200);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Suppressed event status is available', () => pm.response.to.have.status(200));",
+                  "pm.test('Suppressed event is processed', () => pm.expect(pm.response.json().status).to.eql('PROCESSED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept Blocking Head Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{blockingEventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{orderingCustomerId}}\",\n  \"channel\": \"VOICE\",\n  \"notificationType\": \"ORDERED_FAILURE\",\n  \"payload\": {\n    \"transcript\": \"The first event in this customer lane always fails.\",\n    \"simulateFailure\": \"ALWAYS\"\n  },\n  \"timestamp\": \"{{blockingTimestamp}}\"\n}"
+            },
+            "description": "Creates sequence 1 for a dedicated customer and forces it through retries into DLQ."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('blockingEventId', pm.variables.replaceIn('{{$randomUUID}}'));",
+                  "pm.collectionVariables.set('blockingTimestamp', new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Blocking head is admitted', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept Ordered Follower Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{followerEventId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"customerId\": \"{{orderingCustomerId}}\",\n  \"channel\": \"CHAT\",\n  \"notificationType\": \"ORDERED_FOLLOWER\",\n  \"payload\": {\n    \"message\": \"I must wait behind the earlier event.\"\n  },\n  \"timestamp\": \"{{followerTimestamp}}\"\n}"
+            },
+            "description": "Creates the next customer sequence. It cannot pass the earlier unresolved event."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('followerEventId', pm.variables.replaceIn('{{$randomUUID}}'));",
+                  "pm.collectionVariables.set('followerTimestamp', new Date(Date.now() + 1).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Follower is admitted', () => pm.response.to.have.status(202));",
+                  "pm.test('Follower receives a later customer sequence', () => pm.expect(pm.response.json().customerSequence).to.be.above(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Blocking Head Reaches DLQ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{blockingEventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{blockingEventId}}"
+              ]
+            },
+            "description": "Allows three attempts and verifies the lane head is now dead-lettered."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "setTimeout(() => {}, 2000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Blocking event status is available', () => pm.response.to.have.status(200));",
+                  "pm.test('Blocking event reached DLQ', () => pm.expect(pm.response.json().status).to.eql('DLQ'));",
+                  "pm.test('Three attempts were started', () => pm.expect(pm.response.json().attemptStarts).to.eql(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Follower Remains Queued",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{followerEventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{followerEventId}}"
+              ]
+            },
+            "description": "Confirms strict ordering: the later event stays queued behind the DLQ head."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Follower status is available', () => pm.response.to.have.status(200));",
+                  "pm.test('Follower is blocked in QUEUED state', () => pm.expect(pm.response.json().status).to.eql('QUEUED'));",
+                  "pm.test('Follower has not started', () => pm.expect(pm.response.json().attemptStarts).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dead-letter Queue",
+      "item": [
+        {
+          "name": "Wait and List Active DLQ",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "setTimeout(() => {}, 2000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DLQ list is available', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const poison = body.items.find(item => item.eventId === pm.collectionVariables.get('poisonEventId'));",
+                  "pm.test('Persistent failure reached DLQ', () => pm.expect(poison).to.exist);",
+                  "if (poison) pm.collectionVariables.set('dlqId', poison.dlqId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dlq?page=0&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dlq"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Waits for three failed attempts, lists active records, and captures the poison event dlqId."
+          }
+        },
+        {
+          "name": "Replay Captured Dead Letter",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dlq/{{dlqId}}/replay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dlq",
+                "{{dlqId}}",
+                "replay"
+              ]
+            },
+            "description": "Replays the dlqId captured by the previous request. The ALWAYS failure payload will eventually dead-letter again in a new cycle."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Dead letter is scheduled for replay', () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay Same Dead Letter Again",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dlq/{{dlqId}}/replay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dlq",
+                "{{dlqId}}",
+                "replay"
+              ]
+            },
+            "description": "Repeats replay for the same DLQ record to verify replay idempotency."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Repeated replay returns existing result', () => pm.response.to.have.status(200));",
+                  "pm.test('Replay is reported as already completed', () => pm.expect(pm.response.json().alreadyReplayed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List DLQ History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dlq?page=0&size=50&includeReplayed=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dlq"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                },
+                {
+                  "key": "includeReplayed",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('DLQ history is available', () => pm.response.to.have.status(200));",
+                  "pm.test('Page metadata is present', () => pm.expect(pm.response.json().totalElements).to.be.a('number'));",
+                  "const replayed = pm.response.json().items.find(item => item.dlqId === pm.collectionVariables.get('dlqId'));",
+                  "pm.test('Replayed record remains in history', () => pm.expect(replayed && replayed.status).to.eql('REPLAYED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Statistics",
+      "item": [
+        {
+          "name": "Get Processing Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stats"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Statistics are available', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Core counters are numeric', () => {",
+                  "  ['processed', 'inFlight', 'retried', 'deadLettered', 'dlqSize', 'queued', 'retryWaiting'].forEach(key => pm.expect(body[key]).to.be.a('number'));",
+                  "});",
+                  "pm.test('Per-channel metrics exist', () => pm.expect(body.perChannel).to.be.an('array'));",
+                  "pm.test('Snapshot timestamp is present', () => pm.expect(body.snapshotAt).to.exist);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

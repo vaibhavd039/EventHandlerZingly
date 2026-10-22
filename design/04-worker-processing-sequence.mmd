@@ -1,0 +1,49 @@
+sequenceDiagram
+    autonumber
+    participant Coordinator as CustomerQueueCoordinator
+    participant Worker as EventWorker
+    participant Store as EventProcessingStore
+    participant Inbox as Event Inbox
+    participant Failure as FailureSimulator
+    participant Tenant as TenantConfigService
+    participant Preference as UserPreferenceService
+    participant Factory as NotificationServiceFactory
+    participant Provider as Channel Provider
+    participant Processed as Processed Event Store
+    participant Backlog as BacklogTracker
+
+    Coordinator->>Worker: processNext(customerKey)
+    Worker->>Store: claimHead(customerKey, now)
+    Store->>Inbox: find lowest unresolved sequence
+
+    alt no unresolved event
+        Store-->>Worker: NOTHING
+        Worker-->>Coordinator: NOTHING
+    else head is DLQ
+        Store-->>Worker: BLOCKED
+        Worker-->>Coordinator: BLOCKED
+    else retry time is in future
+        Store-->>Worker: WAIT(delay)
+        Worker-->>Coordinator: WAIT(delay)
+        Coordinator->>Coordinator: schedule customer after delay
+    else eligible head exists
+        Store->>Inbox: mark RUNNING and increment attempt
+        Store-->>Worker: CLAIMED(event)
+        Worker->>Worker: parse payload
+        Worker->>Failure: maybeFail(event)
+        Worker->>Tenant: require enabled channel config
+        Worker->>Factory: providerFor(channel)
+        Factory-->>Worker: channel provider
+        Worker->>Provider: validate(payload)
+        Worker->>Preference: resolve preference
+        Worker->>Worker: enrich payload and choose outcome
+        Worker->>Store: complete(event, result)
+        Store->>Processed: insert if eventId absent
+        Store->>Inbox: mark PROCESSED
+        Worker->>Backlog: release()
+        Worker-->>Coordinator: ADVANCE
+        Coordinator->>Coordinator: signal same customer for next event
+    end
+
+    Note over Coordinator,Worker: Different customer keys can run on different workers in parallel.
+    Note over Store,Inbox: Only the lowest unresolved sequence can be claimed.

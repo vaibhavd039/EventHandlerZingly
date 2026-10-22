@@ -1,0 +1,41 @@
+flowchart TD
+    Failed(["Event processing failed"])
+    Count["Increment cycle failure count"]
+    Max{"Failure count reached 3?"}
+    Backoff["Calculate exponential backoff + jitter"]
+    Retry["Set RETRY_WAIT and nextAttemptAt"]
+    Schedule["Schedule customer lane after delay"]
+    Mark["Mark inbox event DLQ"]
+    Record["Create ACTIVE dead-letter record"]
+    Block["Block later events for same customer"]
+    Inspect["GET /dlq returns records"]
+    ReplayRequest(["POST /dlq/{dlqId}/replay"])
+    Exists{"DLQ record exists?"}
+    Replayed{"Already replayed?"}
+    Head{"Event is active customer head?"}
+    NotFound["Return not found"]
+    Existing["Return 200 with existing state"]
+    Conflict["Return conflict"]
+    Reset["Reset event to QUEUED<br/>Reset cycle failures"]
+    MarkReplayed["Mark dead-letter record REPLAYED"]
+    Signal["Signal customer coordinator"]
+    Accepted(["Return 202 Accepted"])
+
+    Failed --> Count --> Max
+    Max -->|"no"| Backoff --> Retry --> Schedule
+    Max -->|"yes"| Mark --> Record --> Block
+    Record -.-> Inspect
+    ReplayRequest --> Exists
+    Exists -->|"no"| NotFound
+    Exists -->|"yes"| Replayed
+    Replayed -->|"yes"| Existing
+    Replayed -->|"no"| Head
+    Head -->|"no"| Conflict
+    Head -->|"yes"| Reset --> MarkReplayed --> Signal --> Accepted
+
+    classDef success fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef decision fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef error fill:#fee2e2,stroke:#dc2626,color:#450a0a
+    class Max,Exists,Replayed,Head decision
+    class Reset,MarkReplayed,Signal,Accepted success
+    class Mark,Record,Block,NotFound,Conflict error

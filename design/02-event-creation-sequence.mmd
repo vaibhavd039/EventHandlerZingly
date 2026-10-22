@@ -1,0 +1,51 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Controller as EventController
+    participant Service as EventService
+    participant Inbox as EventInboxRepository
+    participant Backlog as BacklogTracker
+    participant Tenant as TenantConfigService
+    participant Lock as Customer Admission Lock
+    participant Store as EventAdmissionStore
+    participant Sequence as CustomerSequenceRepository
+    participant Coordinator as CustomerQueueCoordinator
+
+    Client->>Controller: POST /events
+    Controller->>Service: accept(request)
+    Service->>Service: calculate content fingerprint
+    Service->>Inbox: findById(eventId)
+
+    alt eventId already exists
+        Inbox-->>Service: existing event
+        Service->>Service: validate same fingerprint
+        Service-->>Controller: duplicate response
+        Controller-->>Client: 200 OK
+    else new eventId
+        Service->>Backlog: tryReserve()
+        alt backlog full
+            Backlog-->>Service: false
+            Service-->>Controller: BacklogFullException
+            Controller-->>Client: error response
+        else capacity reserved
+            Service->>Tenant: ensureTenant(tenantId)
+            Service->>Lock: lock tenant + customer lane
+            Service->>Inbox: duplicate recheck
+            alt concurrent duplicate found
+                Inbox-->>Service: winner event
+                Service->>Lock: unlock
+                Service->>Backlog: release reserved slot
+                Service-->>Controller: duplicate response
+                Controller-->>Client: 200 OK
+            else still new
+                Service->>Store: insert(request, fingerprint, payload)
+                Store->>Sequence: allocate next customer sequence
+                Store->>Inbox: saveAndFlush QUEUED event
+                Store-->>Service: saved event
+                Service->>Lock: unlock
+                Service->>Coordinator: signal(customerKey)
+                Service-->>Controller: accepted response
+                Controller-->>Client: 202 Accepted
+            end
+        end
+    end

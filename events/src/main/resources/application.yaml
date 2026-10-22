@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: events
+
+  datasource:
+    url: ${EVENTS_DB_URL:jdbc:h2:file:./data/events-db;DB_CLOSE_ON_EXIT=FALSE}
+    driver-class-name: org.h2.Driver
+    username: ${EVENTS_DB_USERNAME:sa}
+    password: ${EVENTS_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
+  sql:
+    init:
+      mode: never
+
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:true}
+      path: /h2-console
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+app:
+  processing:
+    worker-count: ${EVENT_WORKER_COUNT:4}
+    ready-queue-capacity: ${EVENT_READY_QUEUE_CAPACITY:10000}
+    scheduler-threads: ${EVENT_SCHEDULER_THREADS:2}
+    backlog:
+      max-unresolved-events: ${EVENT_MAX_UNRESOLVED:10000}
+    retry:
+      max-failures: ${EVENT_MAX_FAILURES:3}
+      initial-delay: ${EVENT_RETRY_INITIAL_DELAY:250ms}
+      multiplier: ${EVENT_RETRY_MULTIPLIER:2.0}
+      max-delay: ${EVENT_RETRY_MAX_DELAY:5s}
+      jitter-ratio: ${EVENT_RETRY_JITTER_RATIO:0.2}
+      transient-failure-rate: ${EVENT_TRANSIENT_FAILURE_RATE:0.1}
+    restore:
+      reconciliation-interval: ${EVENT_RECONCILIATION_INTERVAL:5s}
+      stale-running-threshold: ${EVENT_STALE_RUNNING_THRESHOLD:30s}
+
+logging:
+  level:
+    com.zingly.events.common.aop: INFO
+    org.hibernate.SQL: INFO
+    liquibase: INFO

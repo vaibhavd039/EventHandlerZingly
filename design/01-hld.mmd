@@ -1,0 +1,57 @@
+flowchart LR
+    Producer["API Client / Load Generator"]
+
+    subgraph Application["Spring Boot Modern Monolith"]
+        Controller["Event Controller<br/>POST /events"]
+        EventService["Event Service<br/>Idempotency + Admission"]
+        Coordinator["Customer Queue Coordinator<br/>One lane per tenant + customer"]
+        Workers["Worker Pool<br/>N parallel workers"]
+        Processor["Event Worker<br/>Validate + Enrich + Route"]
+        Factory["Notification Service Factory"]
+        Handlers["Chat / Email / Voice Providers"]
+        Retry["Retry Policy<br/>Backoff + Jitter"]
+        DLQApi["DLQ Controller<br/>GET /dlq + POST replay"]
+        Restore["Startup Restore + Reconciliation"]
+        Stats["Stats Controller<br/>GET /stats"]
+    end
+
+    subgraph Database["H2 Database"]
+        Inbox[("Event Inbox<br/>Durable queue + status")]
+        Sequence[("Customer Sequence")]
+        Processed[("Processed Events")]
+        Tenant[("Tenant + Channel Config")]
+        Preference[("User Preferences")]
+        DeadLetter[("Dead Letter Queue")]
+    end
+
+    Producer --> Controller --> EventService
+    EventService -->|"duplicate check"| Inbox
+    EventService -->|"atomic insert"| Sequence
+    EventService --> Inbox
+    EventService -->|"signal customer key"| Coordinator
+    Coordinator --> Workers --> Processor
+    Processor --> Tenant
+    Processor --> Preference
+    Processor --> Factory --> Handlers
+    Processor -->|"success"| Processed
+    Processor -->|"update status"| Inbox
+    Processor -->|"transient failure"| Retry
+    Retry -->|"attempt below 3"| Coordinator
+    Retry -->|"third failure"| DeadLetter
+    DLQApi --> DeadLetter
+    DLQApi -->|"reset head event"| Inbox
+    DLQApi -->|"signal customer key"| Coordinator
+    Restore --> Inbox
+    Restore --> Coordinator
+    Stats --> Inbox
+    Stats --> Processed
+    Stats --> DeadLetter
+
+    classDef api fill:#dbeafe,stroke:#2563eb,color:#172554
+    classDef processing fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef data fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef failure fill:#fee2e2,stroke:#dc2626,color:#450a0a
+    class Controller,DLQApi,Stats api
+    class EventService,Coordinator,Workers,Processor,Factory,Handlers,Restore processing
+    class Inbox,Sequence,Processed,Tenant,Preference data
+    class Retry,DeadLetter failure

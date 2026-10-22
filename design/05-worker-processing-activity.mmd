@@ -1,0 +1,42 @@
+flowchart TD
+    Signal(["Customer key dequeued"])
+    Lane{"Lane already running?"}
+    Claim["Find lowest unresolved customer event"]
+    Head{"Head state?"}
+    Nothing(["NOTHING: stop lane pass"])
+    Blocked(["BLOCKED: wait for DLQ replay"])
+    Wait["WAIT: schedule lane at nextAttemptAt"]
+    Running["Claim event and mark RUNNING"]
+    Prepare["Parse payload and simulate failure"]
+    Config["Load enabled tenant channel config"]
+    Provider["Select provider and validate payload"]
+    Preference["Resolve customer preference"]
+    Enrich["Build enriched payload and outcome"]
+    Success{"Preparation successful?"}
+    Complete["Idempotently save processed result<br/>Mark inbox PROCESSED"]
+    Release["Release backlog capacity"]
+    Advance["ADVANCE: signal same customer"]
+    Failure["Record failed attempt"]
+    Exhausted{"Third failed attempt?"}
+    Retry["Set RETRY_WAIT<br/>Calculate backoff + jitter"]
+    Delay["Schedule customer after retry delay"]
+    DLQ["Set event DLQ<br/>Create dead-letter record"]
+
+    Signal --> Lane
+    Lane -->|"yes"| Nothing
+    Lane -->|"no"| Claim --> Head
+    Head -->|"none"| Nothing
+    Head -->|"DLQ"| Blocked
+    Head -->|"retry not due"| Wait
+    Head -->|"eligible"| Running --> Prepare --> Config --> Provider --> Preference --> Enrich --> Success
+    Success -->|"yes"| Complete --> Release --> Advance
+    Success -->|"no"| Failure --> Exhausted
+    Exhausted -->|"no"| Retry --> Delay
+    Exhausted -->|"yes"| DLQ --> Blocked
+
+    classDef success fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef decision fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef error fill:#fee2e2,stroke:#dc2626,color:#450a0a
+    class Lane,Head,Success,Exhausted decision
+    class Complete,Release,Advance success
+    class Failure,Retry,DLQ,Blocked error

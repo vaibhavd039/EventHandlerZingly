@@ -1,0 +1,35 @@
+flowchart TD
+    Start(["POST /events received"])
+    Validate["Validate request DTO"]
+    Fingerprint["Calculate content fingerprint"]
+    Exists{"eventId exists?"}
+    Same{"Fingerprint matches?"}
+    Duplicate["Return existing event<br/>200 OK, duplicate=true"]
+    Conflict["Reject conflicting duplicate"]
+    Reserve{"Backlog capacity available?"}
+    Full["Reject because backlog is full"]
+    Tenant["Ensure tenant exists"]
+    Lock["Lock tenant + customer admission lane"]
+    Recheck{"Duplicate found after lock?"}
+    Sequence["Allocate next customer sequence"]
+    Persist["Persist QUEUED event in inbox"]
+    Unlock["Unlock admission lane"]
+    Signal["Signal customer queue coordinator"]
+    Accepted["Return 202 Accepted"]
+
+    Start --> Validate --> Fingerprint --> Exists
+    Exists -->|"yes"| Same
+    Same -->|"yes"| Duplicate
+    Same -->|"no"| Conflict
+    Exists -->|"no"| Reserve
+    Reserve -->|"no"| Full
+    Reserve -->|"yes"| Tenant --> Lock --> Recheck
+    Recheck -->|"yes"| Unlock --> Duplicate
+    Recheck -->|"no"| Sequence --> Persist --> Unlock --> Signal --> Accepted
+
+    classDef success fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef decision fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef error fill:#fee2e2,stroke:#dc2626,color:#450a0a
+    class Exists,Same,Reserve,Recheck decision
+    class Duplicate,Accepted success
+    class Conflict,Full error

@@ -1,0 +1,6 @@
+2026-10-22 15:42:04.753951+05:30 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "DATABASECHANGELOGLOCK" not found; SQL statement:
+SELECT COUNT(*) FROM PUBLIC.DATABASECHANGELOGLOCK [42102-240]
+2026-10-22 15:49:17.787636+05:30 jdbc[6]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "SELECT * [*]FROMPROCESSED_EVENT"; SQL statement:
+SELECT * FROMPROCESSED_EVENT [42000-240]
